@@ -1,5 +1,5 @@
-# Experiment 2
-#使用CIFAR-10 数据集
+#Experiment 2
+#使用CIFAR-10数据集
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -95,4 +95,3 @@ mixed_precision_pruned_resnet_model = OriginalResNet().to(device)
 mixed_precision_pruned_resnet_model = prune_model(mixed_precision_pruned_resnet_model)
 optimizer_mixed_precision_pruned_resnet = optim.SGD(mixed_precision_pruned_resnet_model.parameters(), lr=0.001, momentum=0.9)
 train_and_evaluate_model_mixed_precision(mixed_precision_pruned_resnet_model, optimizer_mixed_precision_pruned_resnet, train_loader, test_loader, epochs=3, criterion=nn.CrossEntropyLoss())
-
