@@ -1,2 +1,2 @@
 # A-methods-to-improve-the-computational-performance-of-deep-learning-models
-Paper code
+This is the code of ResNet model for this paper.
