@@ -100,8 +100,11 @@ class SharedResNet(nn.Module):
 # 混合精度训练和评估模型的函数
 def train_and_evaluate_model_mixed_precision(model, optimizer, train_loader, test_loader, epochs, criterion):
     scaler = torch.cuda.amp.GradScaler()
-    
     for epoch in range(epochs):
+        epoch_loss = 0
+        epoch_correct = 0
+        epoch_total = 0
+
         model.train()
         for batch_idx, (data, target) in enumerate(train_loader):
             data, target = data.to(device), target.to(device)
@@ -112,29 +115,20 @@ def train_and_evaluate_model_mixed_precision(model, optimizer, train_loader, tes
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
-            
-            if batch_idx % 100 == 0:
-                print(
-                    f'Epoch {epoch}: [{batch_idx * len(data)}/{len(train_loader.dataset)} ({100. * batch_idx / len(train_loader):.0f}%)]\tLoss: {loss.item():.6f}')
+            epoch_loss += loss.item()
+            epoch_correct += output.argmax(dim=1).eq(target).sum().item()
+            epoch_total += target.size(0)
 
-    test_loss = 0
-    correct = 0
-    total = 0
-    model.eval()
-    with torch.no_grad():
-        for data, target in test_loader:
-            data, target = data.to(device), target.to(device)
-            output = model(data)
-            test_loss += criterion(output, target).item()
-            pred = output.argmax(dim=1, keepdim=True)
-            total += target.size(0)
-            correct += pred.eq(target.view_as(pred)).sum().item()
+        epoch_accuracy = 100. * epoch_correct / epoch_total
+        print(f'Epoch {epoch}, Loss: {epoch_loss:.4f}, Accuracy: {epoch_accuracy:.2f}%')
 
-    test_loss /= len(test_loader.dataset)
-    print(f'Test set: Average loss: {test_loss:.4f}, Accuracy: {100. * correct / total:.0f}%')
-# 训练和评估模型的函数
+# 训练和评估模型的函数（用于不使用混合精度的情况）
 def train_and_evaluate_model(model, optimizer, train_loader, test_loader, epochs, criterion):
     for epoch in range(epochs):
+        epoch_loss = 0
+        epoch_correct = 0
+        epoch_total = 0
+
         model.train()
         for batch_idx, (data, target) in enumerate(train_loader):
             data, target = data.to(device), target.to(device)
@@ -143,32 +137,18 @@ def train_and_evaluate_model(model, optimizer, train_loader, test_loader, epochs
             loss = criterion(output, target)
             loss.backward()
             optimizer.step()
-            if batch_idx % 100 == 0:
-                print(
-                    f'Epoch {epoch}: [{batch_idx * len(data)}/{len(train_loader.dataset)} ({100. * batch_idx / len(train_loader):.0f}%)]\tLoss: {loss.item():.6f}')
+            epoch_loss += loss.item()
+            epoch_correct += output.argmax(dim=1).eq(target).sum().item()
+            epoch_total += target.size(0)
 
-    test_loss = 0
-    correct = 0
-    total = 0
-    model.eval()
-    with torch.no_grad():
-        for data, target in test_loader:
-            data, target = data.to(device), target.to(device)
-            output = model(data)
-            test_loss += criterion(output, target).item()
-            pred = output.argmax(dim=1, keepdim=True)
-            total += target.size(0)
-            correct += pred.eq(target.view_as(pred)).sum().item()
-
-    test_loss /= len(test_loader.dataset)
-    print(f'Test set: Average loss: {test_loss:.4f}, Accuracy: {100. * correct / total:.0f}%')
-
+        epoch_accuracy = 100. * epoch_correct / epoch_total
+        print(f'Epoch {epoch}, Loss: {epoch_loss:.4f}, Accuracy: {epoch_accuracy:.2f}%')
     
 # 第一组对比实验：原始的 ResNet 模型
 print("Training and evaluating the Original ResNet model:")
 original_resnet_model = OriginalResNet().to(device)
 optimizer_original_resnet = optim.SGD(original_resnet_model.parameters(), lr=0.001, momentum=0.9)
-train_and_evaluate_model_mixed_precision(original_resnet_model, optimizer_original_resnet, train_loader, test_loader, epochs=1, criterion=criterion)
+train_and_evaluate_model_mixed_precision(original_resnet_model, optimizer_original_resnet, train_loader, test_loader, epochs=3, criterion=criterion)
 
 # 第二组对比实验：预训练的 ResNet 模型
 print("Training and evaluating the Pretrained ResNet model:")
