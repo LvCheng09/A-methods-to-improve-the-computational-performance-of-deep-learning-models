@@ -13,8 +13,9 @@ import torch.cuda.amp as amp
 # 定义数据预处理
 transform = transforms.Compose([
     transforms.Resize((224, 224)),  # 调整图像大小
+    transforms.Grayscale(num_output_channels=3),  # 转换为具有三个通道的灰度图像
     transforms.ToTensor(),  # 转换为张量
-    transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))  # 标准化
+    transforms.Normalize((0.1307,), (0.3081,))  # 标准化
 ])
 
 # 加载 CIFAR-10 数据集
@@ -23,7 +24,6 @@ test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, trans
 
 train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
-
 # 检查是否有可用的 GPU
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -43,11 +43,17 @@ def prune_model(model):
             prune.l1_unstructured(module, name='weight', amount=0.2)
     return model
 
-# 混合精度训练和评估模型的函数
 def train_and_evaluate_model_mixed_precision(model, optimizer, train_loader, test_loader, epochs, criterion):
     scaler = torch.cuda.amp.GradScaler()
-    
+    losses = []
+    accuracies = []
+
     for epoch in range(epochs):
+        epoch_loss = 0
+        correct = 0
+        total = 0
+
+        # 训练模型
         model.train()
         for batch_idx, (data, target) in enumerate(train_loader):
             data, target = data.to(device), target.to(device)
@@ -58,11 +64,18 @@ def train_and_evaluate_model_mixed_precision(model, optimizer, train_loader, tes
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
-            
-            if batch_idx % 100 == 0:
-                print(
-                    f'Epoch {epoch}: [{batch_idx * len(data)}/{len(train_loader.dataset)} ({100. * batch_idx / len(train_loader):.0f}%)]\tLoss: {loss.item():.6f}')
+            epoch_loss += loss.item()
+            pred = output.argmax(dim=1, keepdim=True)
+            total += target.size(0)
+            correct += pred.eq(target.view_as(pred)).sum().item()
 
+        epoch_loss /= len(train_loader.dataset)
+        accuracy = 100. * correct / total
+        losses.append(epoch_loss)
+        accuracies.append(accuracy)
+        print(f'Epoch {epoch}, Loss: {epoch_loss:.4f}, Accuracy: {accuracy:.2f}%')
+
+    # 测试模型
     test_loss = 0
     correct = 0
     total = 0
@@ -80,8 +93,10 @@ def train_and_evaluate_model_mixed_precision(model, optimizer, train_loader, tes
         inference_time = end_time - start_time  # 计算推理时间
 
     test_loss /= len(test_loader.dataset)
-    accuracy = 100. * correct / total
-    print(f'Test set: Average loss: {test_loss:.4f}, Accuracy: {accuracy:.0f}%, Inference time: {inference_time:.4f} seconds')
+    test_accuracy = 100. * correct / total
+    print(f'Test set: Average loss: {test_loss:.4f}, Accuracy: {test_accuracy:.0f}%, Inference time: {inference_time:.4f} seconds')
+    return losses, accuracies
+
 
 # 训练和评估原始的 ResNet 模型
 print("Training and evaluating the Original ResNet model:")
