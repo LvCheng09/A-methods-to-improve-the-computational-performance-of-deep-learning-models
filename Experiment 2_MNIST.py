@@ -44,11 +44,17 @@ def prune_model(model):
             prune.l1_unstructured(module, name='weight', amount=0.2)
     return model
 
-# 混合精度训练和评估模型的函数
 def train_and_evaluate_model_mixed_precision(model, optimizer, train_loader, test_loader, epochs, criterion):
     scaler = torch.cuda.amp.GradScaler()
-    
+    losses = []
+    accuracies = []
+
     for epoch in range(epochs):
+        epoch_loss = 0
+        correct = 0
+        total = 0
+
+        # 训练模型
         model.train()
         for batch_idx, (data, target) in enumerate(train_loader):
             data, target = data.to(device), target.to(device)
@@ -59,11 +65,18 @@ def train_and_evaluate_model_mixed_precision(model, optimizer, train_loader, tes
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
-            
-            if batch_idx % 100 == 0:
-                print(
-                    f'Epoch {epoch}: [{batch_idx * len(data)}/{len(train_loader.dataset)} ({100. * batch_idx / len(train_loader):.0f}%)]\tLoss: {loss.item():.6f}')
+            epoch_loss += loss.item()
+            pred = output.argmax(dim=1, keepdim=True)
+            total += target.size(0)
+            correct += pred.eq(target.view_as(pred)).sum().item()
 
+        epoch_loss /= len(train_loader.dataset)
+        accuracy = 100. * correct / total
+        losses.append(epoch_loss)
+        accuracies.append(accuracy)
+        print(f'Epoch {epoch}, Loss: {epoch_loss:.4f}, Accuracy: {accuracy:.2f}%')
+
+    # 测试模型
     test_loss = 0
     correct = 0
     total = 0
@@ -81,8 +94,10 @@ def train_and_evaluate_model_mixed_precision(model, optimizer, train_loader, tes
         inference_time = end_time - start_time  # 计算推理时间
 
     test_loss /= len(test_loader.dataset)
-    accuracy = 100. * correct / total
-    print(f'Test set: Average loss: {test_loss:.4f}, Accuracy: {accuracy:.0f}%, Inference time: {inference_time:.4f} seconds')
+    test_accuracy = 100. * correct / total
+    print(f'Test set: Average loss: {test_loss:.4f}, Accuracy: {test_accuracy:.0f}%, Inference time: {inference_time:.4f} seconds')
+    return losses, accuracies
+
 
 # 训练和评估原始的 ResNet 模型
 print("Training and evaluating the Original ResNet model:")
